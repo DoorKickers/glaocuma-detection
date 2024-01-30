@@ -8,6 +8,7 @@ from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from torch.utils.data import DataLoader
 from model import Autoencoder, DenoisingAutoencoder, ResNet18
 from torchvision.datasets import ImageFolder
+import torch.nn.functional as F
 
 torch.manual_seed(1)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,12 +48,13 @@ def train(model, device, train_loader, optimizer, epoch):
     for batch_idx, (images, labels) in enumerate(train_loader):
         total_images += len(images)
         images = images.to(device)
-        images = images + 0.005 * torch.randn(images.size()).to(device)
+        images = images + 0.01 * torch.randn(images.size()).to(device)
         # images = AE(images)
         labels = labels.to(device)
 
         outputs = model(images)
-        loss = criterion(outputs, labels)
+        loss = F.nll_loss(outputs, labels)
+        # loss = criterion(outputs, labels)
 
         optimizer.zero_grad()
         loss.backward()
@@ -64,6 +66,7 @@ def train(model, device, train_loader, optimizer, epoch):
         train_loss += loss.item() * images.size(0)
         # print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
         _, predicted = torch.max(outputs.data, 1)
+        # print(_)
         train_correct += (predicted == labels).sum().item()
 
     train_loss /= len(train_dataset)
@@ -82,17 +85,17 @@ def eval(model, device, test_loader):
         fn = 0
         for images, labels in test_loader:
             images = images.to(device)
-            images = images + 0.005 * torch.randn(images.size()).to(device)
+            ## images = images + 0.005 * torch.randn(images.size()).to(device)
             # print(images.shape)
             # images = AE(images)
-            image, _ = test_loader.dataset[0]
+            # image, _ = test_loader.dataset[0]
             # image_tensor = image.unsqueeze(0)
             # image_tensor = image_tensor.to(device)
-            image_noisy = images[0]
-            image = transforms.functional.to_pil_image(image)
-            image_noisy = transforms.functional.to_pil_image(image_noisy.squeeze(0))
-            image.save('image.jpg')
-            image_noisy.save('image_noisy.jpg')
+            # image_noisy = images[0]
+            # image = transforms.functional.to_pil_image(image)
+            # image_noisy = transforms.functional.to_pil_image(image_noisy.squeeze(0))
+            # image.save('image.jpg')
+            # image_noisy.save('image_noisy.jpg')
             # image_tensor = image.unsqueeze(0)
             # image_tensor = image_tensor.to(device)
             # image_ae = AE(image_tensor)

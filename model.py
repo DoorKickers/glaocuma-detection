@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torchvision.models as models
+import torch.nn.functional as F
 
 class Autoencoder(nn.Module):
     def __init__(self):
@@ -69,8 +70,11 @@ class ResNet18(nn.Module):
         super(ResNet18, self).__init__()
         self.resnet18 = models.resnet18(pretrained=True)
         self.fc = nn.Linear(1000, 2)  # 添加一个全连接层
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.resnet18(x)
         x = self.fc(x)
+        x = F.log_softmax(x, dim=1)
+        # x = self.softmax(x)
         return x
