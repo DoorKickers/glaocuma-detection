@@ -42,10 +42,13 @@ def train(model, device, train_loader, optimizer, epoch):
     model.train()
     total_images = 0
     scheduler.step()
+    train_correct = 0
+    train_loss = 0
     for batch_idx, (images, labels) in enumerate(train_loader):
         total_images += len(images)
         images = images.to(device)
-        images = AE(images)
+        images = images + 0.005 * torch.randn(images.size()).to(device)
+        # images = AE(images)
         labels = labels.to(device)
 
         outputs = model(images)
@@ -58,7 +61,14 @@ def train(model, device, train_loader, optimizer, epoch):
         print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch + 1, total_images, len(train_dataset),
             100. * total_images / len(train_dataset), loss.item()))
+        train_loss += loss.item() * images.size(0)
         # print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
+        _, predicted = torch.max(outputs.data, 1)
+        train_correct += (predicted == labels).sum().item()
+
+    train_loss /= len(train_dataset)
+    train_accuracy = train_correct / len(train_dataset)
+    print(f"Train Loss: {train_loss:.4f} - Train Accuracy: {train_accuracy:.4f}")
 
 def eval(model, device, test_loader):
     model.eval()
@@ -66,11 +76,23 @@ def eval(model, device, test_loader):
     with torch.no_grad():
         correct = 0
         total = 0
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
         for images, labels in test_loader:
             images = images.to(device)
+            images = images + 0.005 * torch.randn(images.size()).to(device)
             # print(images.shape)
             # images = AE(images)
-            # image, _ = test_loader.dataset[0]
+            image, _ = test_loader.dataset[0]
+            # image_tensor = image.unsqueeze(0)
+            # image_tensor = image_tensor.to(device)
+            image_noisy = images[0]
+            image = transforms.functional.to_pil_image(image)
+            image_noisy = transforms.functional.to_pil_image(image_noisy.squeeze(0))
+            image.save('image.jpg')
+            image_noisy.save('image_noisy.jpg')
             # image_tensor = image.unsqueeze(0)
             # image_tensor = image_tensor.to(device)
             # image_ae = AE(image_tensor)
@@ -86,8 +108,15 @@ def eval(model, device, test_loader):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            tp = torch.sum((predicted == 1) & (labels == 1)).item()
+            tn = torch.sum((predicted == 0) & (labels == 0)).item()
+            fp = torch.sum((predicted == 1) & (labels == 0)).item()
+            fn = torch.sum((predicted == 0) & (labels == 1)).item()
         accuracy = correct / total
+        sensitivity = tp / (tp + fn)
+        specificity = tn / (tn + fp)
         print(f"Accuracy on test set: {accuracy:.2%}")
+        print(f"Val Sensitivity: {sensitivity:.4f} - Val Specificity: {specificity:.4f}")
 
 
 start_time = time.time()
