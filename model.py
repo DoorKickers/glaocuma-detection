@@ -80,24 +80,24 @@ class ResNet18(nn.Module):
             # param.requires_grad = False
 
     def forward(self, x):
-        x = self.resnet18.conv1(x)
-        x = self.resnet18.bn1(x)
-        x = self.resnet18.relu(x)
-        x = self.resnet18.maxpool(x)
+        # x = self.resnet18.conv1(x)
+        # x = self.resnet18.bn1(x)
+        # x = self.resnet18.relu(x)
+        # x = self.resnet18.maxpool(x)
 
-        x = self.resnet18.layer1(x)
-        x = self.resnet18.layer2(x)
-        x = self.resnet18.layer3(x)
-        x = self.resnet18.layer4(x)
+        # x = self.resnet18.layer1(x)
+        # x = self.resnet18.layer2(x)
+        # x = self.resnet18.layer3(x)
+        # x = self.resnet18.layer4(x)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc3(x)
-        # x = self.resnet18(x)
+        # x = self.avgpool(x)
+        # x = torch.flatten(x, 1)
+        # x = self.fc3(x)
+        x = self.resnet18(x)
         # x = self.pool(x)
         # x = self.fc3(x)
         # x = self.dropout(x)
-        # x = self.fc(x)
+        x = self.fc(x)
         # x = self.fc1(x)
         # x = self.fc2(x)
         x = F.log_softmax(x, dim=1)
@@ -130,3 +130,21 @@ class ResNet50(nn.Module):
         x = F.log_softmax(x, dim = 1)
         # x = nn.softmax(x, dim = 1)
         return x
+
+
+class ResNet50_max(nn.Module):
+    def __init__(self, num_classes=2):
+        super(ResNet50_max, self).__init__()
+        self.resnet = models.resnet50(pretrained=True)
+        self.resnet.avgpool = nn.AdaptiveMaxPool2d((1, 1))
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
+
+    def forward(self, x):
+        x = self.resnet(x)
+        x = F.log_softmax(x, dim = 1)
+        return x
+
+
+# model = ResNet50_max()
+# print(model)
+

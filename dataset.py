@@ -30,11 +30,11 @@ class AugmentedImageFolder(datasets.ImageFolder):
 
 
 transform = Compose([
-   Resize((224, 224)),  # Resize the images to a specific size
+   Resize((128, 128)),  # Resize the images to a specific size
    ToTensor(),  # Convert the images to tensors
 ])
 transform2 = transforms.Compose([
-    transforms.RandomRotation((-30, 30)),  # 随机旋转 -30度~30度
+    # transforms.RandomRotation((-30, 30)),  # 随机旋转 -30度~30度
     transforms.RandomHorizontalFlip(),  # 随机水平翻转
     transforms.RandomVerticalFlip(),  # 随机竖直翻转
     transforms.RandomResizedCrop(size=224, scale=(0.8, 1.2)),  # 随机缩放 0.8倍~1.2倍并随机裁剪到指定大小
@@ -43,9 +43,26 @@ transform2 = transforms.Compose([
 
 train_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/training_set"
 test_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/test_set"
-# train_dataset = ImageFolder(root = train_dir, transform = transform2)
+train_dataset = ImageFolder(root = train_dir, transform = transform)
+extended_dataset = []
+
+def rotate_images(image, num_rotations):
+    rotated_images = []
+    for angle in range(0, 360, num_rotations):
+        rotated_image = transforms.functional.rotate(image, angle)
+        rotated_images.append(rotated_image)
+    return rotated_images
+
+for image, label in train_dataset:
+    rotated_images = rotate_images(image, 30)
+    extended_dataset.extend([(rotated_image, label) for rotated_image in rotated_images])
+
+print(len(extended_dataset))
+torch.save(extended_dataset, 'gan128_train_dataset.pth')
+# torch.save(train_dataset, 'origin_train_dataset.pth')
+sys.exit(0)
 test_dataset = ImageFolder(root = test_dir, transform = transform)
-train_dataset = AugmentedImageFolder(root=train_dir, transform=None)
+# train_dataset = AugmentedImageFolder(root=train_dir, transform=None)
 augmented_dataset = []
 for image, label in train_dataset:
     augmented_dataset.append((transform(image), label))
