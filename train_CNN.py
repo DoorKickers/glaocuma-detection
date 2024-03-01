@@ -7,7 +7,7 @@ import time
 import sys
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from torch.utils.data import DataLoader
-from model import Autoencoder, DenoisingAutoencoder, ResNet18, ResNet50, ResNet50_max
+from model import Autoencoder, DenoisingAutoencoder, ResNet18, ResNet50, ResNet50_max, ResNet50_normal
 from torchvision.datasets import ImageFolder
 from PIL import Image
 from gradCAM import GradCAM
@@ -23,8 +23,9 @@ log_interval = 1
 
 
 # train_dataset = torch.load('origin_train_dataset.pth')
-# train_dataset = torch.load('ex_train_dataset.pth')
-train_dataset = torch.load('accredited_extended_dataset.pth')
+train_dataset = torch.load('ex_train_dataset.pth')
+# train_dataset = torch.load('accredited_extended_dataset.pth')
+# train_dataset = torch.load('accredited_extended_dataset.pth')
 test_dataset = torch.load('test_dataset.pth')
 
 train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
@@ -36,20 +37,20 @@ test_loader = DataLoader(test_dataset, len(test_dataset), shuffle=False)
 # model.load_state_dict(torch.load('autoencoder.pth'))
 # CNNmodel = ResNet18(2).to(device)
 # CNNmodel = ResNet50_max(2).to(device)
-CNNmodel = ResNet50(2).to(device)
+CNNmodel = ResNet50_normal(2).to(device)
 VGGmodel = models.vgg19(pretrained = True).to(device)
 # print(VGGmodel)
 # sys.exit(0)
 num_features = VGGmodel.classifier[6].in_features
 VGGmodel.classifier[6] = nn.Linear(num_features, 2).to(device)
 
-# print(VGGmodel)
+print(VGGmodel)
 criterion = nn.CrossEntropyLoss()
 # criterion = nn.NLLLoss().to(device)
-for param in VGGmodel.features.parameters():
-    param.requires_grad = False
-# optimizer = optim.Adam(VGGmodel.parameters(), lr=learning_rate)
-optimizer = optim.RMSprop(VGGmodel.parameters(), lr=1e-5)
+# for param in VGGmodel.features.parameters():
+#   param.requires_grad = False
+optimizer = optim.Adam(CNNmodel.parameters(), lr=1e-3)
+# optimizer = optim.RMSprop(CNNmodel.parameters(), lr=1e-5)
 
 # 使用学习率调度器
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
@@ -104,7 +105,8 @@ def train(model, device, train_loader, optimizer, epoch, scheduler):
     print(f"Train Loss: {train_loss:.4f} - Train Accuracy: {train_accuracy:.4f}")
 
 def eval(model, device, test_loader):
-    model.eval()
+    # model.eval()
+    model.train()
     criterion = nn.MSELoss()
     global glo_mx
     pre_mx = 0.8276
@@ -216,8 +218,8 @@ start_time = time.time()
 # eval(CNNmodel, device, test_loader)
 def train_single():
     for epoch in range(num_epochs):
-        train(VGGmodel, device, train_loader, optimizer, epoch, scheduler)
-        eval(VGGmodel, device, test_loader)
+        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler)
+        eval(CNNmodel, device, test_loader)
         elapsed_time = time.time() - start_time
         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
         print(f"Max Accuracy on test set: {glo_mx:.2%}")
@@ -233,6 +235,8 @@ def fine_tuning(epochs_first, epochs_second):
         print(f"Max Accuracy on test set: {glo_mx:.2%}")
     for param in VGGmodel.features.parameters():
         param.requires_grad = True
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = 2e-5
     for epoch in range(epochs_second):
         train(VGGmodel, device, train_loader, optimizer, epoch, scheduler)
         eval(VGGmodel, device, test_loader)
@@ -240,7 +244,37 @@ def fine_tuning(epochs_first, epochs_second):
         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
         print(f"Max Accuracy on test set: {glo_mx:.2%}") 
 
-# fine_tuning(20, 20)
+def fine_tuning_res(epochs_first, epochs_second):
+    # Freeze the parameters in the feature extraction part
+    for param in CNNmodel.resnet50.parameters():
+        param.requires_grad = False
+    for param in CNNmodel.resnet50.fc.parameters():
+        param.requires_grad = True
+    for m in CNNmodel.modules():
+          if isinstance(m, nn.BatchNorm2d):
+              m.weight.requires_grad = True
+              m.bias.requires_grad = True
+    for epoch in range(epochs_first):
+        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler)
+        eval(CNNmodel, device, test_loader)
+        elapsed_time = time.time() - start_time
+        print(f"Elapsed Time: {elapsed_time:.2f} seconds")
+        print(f"Max Accuracy on test set: {glo_mx:.2%}")
+    for param in CNNmodel.resnet50.parameters():
+        param.requires_grad = True
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = 2e-5
+    for epoch in range(epochs_second):
+        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler)
+        eval(CNNmodel, device, test_loader)
+        elapsed_time = time.time() - start_time
+        print(f"Elapsed Time: {elapsed_time:.2f} seconds")
+        print(f"Max Accuracy on test set: {glo_mx:.2%}") 
+# 原则 所有的参数改变 执行不同的代码 一定要修改调用而不是去注释定义
+# fine_tuning(10, 20)
+for param in CNNmodel.parameters():
+    param.requires_grad = True
 train_single()
+# fine_tuning_res(10, 20)
 # torch.save(model.state_dict(), 'autoencoder.pth')
 # torch.save(CNNmodel.state_dict(), 'ResNet18.pth')

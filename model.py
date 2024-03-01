@@ -131,6 +131,19 @@ class ResNet50(nn.Module):
         # x = nn.softmax(x, dim = 1)
         return x
 
+class ResNet50_normal(nn.Module):
+    def __init__(self, num_classes):
+        super(ResNet50_normal, self).__init__()
+        self.resnet50 = models.resnet50(pretrained=True)
+        self.resnet50.fc = nn.Linear(2048, num_classes)
+        # for param in self.resnet50.parameters():
+            # param.requires_grad = False
+
+    def forward(self, x):
+        x = self.resnet50(x)
+        # x = F.log_softmax(x, dim = 1)
+        # x = nn.softmax(x, dim = 1)
+        return x
 
 class ResNet50_max(nn.Module):
     def __init__(self, num_classes=2):
