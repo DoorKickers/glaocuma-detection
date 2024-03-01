@@ -30,7 +30,7 @@ class AugmentedImageFolder(datasets.ImageFolder):
 
 
 transform = Compose([
-   Resize((128, 128)),  # Resize the images to a specific size
+   Resize((256, 256)),  # Resize the images to a specific size
    ToTensor(),  # Convert the images to tensors
 ])
 transform2 = transforms.Compose([
