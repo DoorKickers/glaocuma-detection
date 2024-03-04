@@ -23,13 +23,15 @@ log_interval = 1
 
 
 # train_dataset = torch.load('origin_train_dataset.pth')
-train_dataset = torch.load('ex_train_dataset.pth')
-# train_dataset = torch.load('accredited_extended_dataset.pth')
+# train_dataset = torch.load('ex_train_dataset.pth')
+train_dataset = torch.load('accredited_extended_dataset.pth')
 # train_dataset = torch.load('accredited_extended_dataset.pth')
 test_dataset = torch.load('test_dataset.pth')
+valid_dataset = torch.load('ex_train_dataset.pth')
 
 train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True)
 test_loader = DataLoader(test_dataset, len(test_dataset), shuffle=False)
+valid_loader = DataLoader(valid_dataset, len(valid_dataset), shuffle=False)
 
 
 
@@ -49,8 +51,8 @@ criterion = nn.CrossEntropyLoss()
 # criterion = nn.NLLLoss().to(device)
 # for param in VGGmodel.features.parameters():
 #   param.requires_grad = False
-optimizer = optim.Adam(CNNmodel.parameters(), lr=1e-3)
-# optimizer = optim.RMSprop(CNNmodel.parameters(), lr=1e-5)
+# optimizer = optim.Adam(CNNmodel.parameters(), lr=1e-3)
+optimizer = optim.RMSprop(VGGmodel.parameters(), lr=1e-5)
 
 # 使用学习率调度器
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
@@ -62,18 +64,35 @@ AE.eval()
 
 glo_mx = 0.0
 
-weight_decay = 1e-5
+weight_decay = 1e-4;
 
 def train(model, device, train_loader, optimizer, epoch, scheduler):
     model.train()
     total_images = 0
-    scheduler.step()
+    # scheduler.step()
     train_correct = 0
     train_loss = 0
+    def random_block_mask(images_tensor, block_size):
+        _, _, h, w = images_tensor.size()
+        top = torch.randint(0, h - block_size, (images_tensor.size(0),), device=images_tensor.device)
+        left = torch.randint(0, w - block_size, (images_tensor.size(0),), device=images_tensor.device)
+        for i in range(images_tensor.size(0)):
+            images_tensor[i, :, top[i]:top[i]+block_size, left[i]:left[i]+block_size] = 0.0
+        return images_tensor
+    image_transform = transforms.Compose([
+        transforms.RandomRotation(80),  # 随机旋转角度范围为 -15 到 15 度
+        # transforms.RandomResizedCrop(224, scale=(0.8, 1.2))  # 随机缩放大小在 0.8 到 1.2 之间
+    ])
+
     for batch_idx, (images, labels) in enumerate(train_loader):
         total_images += len(images)
         images = images.to(device)
-        # images = images + 0.001 * torch.randn(images.size()).to(device)
+        # if batch_idx % 3 == 0:
+            # images = random_block_mask(images, 50)
+        # images = random_block_mask(images, 25)
+        # for i in range(images.size(0)):
+            # images[i] = image_transform(images[i]).to(device)
+        # images = images + 0.003 * torch.randn(images.size()).to(device)
         # images = AE(images)
         labels = labels.to(device)
 
@@ -85,7 +104,7 @@ def train(model, device, train_loader, optimizer, epoch, scheduler):
         for param in model.parameters():
             l2_reg += torch.norm(param)
 
-        # loss += weight_decay * l2_reg
+        loss += weight_decay * l2_reg
 
         optimizer.zero_grad()
         loss.backward()
@@ -105,8 +124,8 @@ def train(model, device, train_loader, optimizer, epoch, scheduler):
     print(f"Train Loss: {train_loss:.4f} - Train Accuracy: {train_accuracy:.4f}")
 
 def eval(model, device, test_loader):
-    # model.eval()
-    model.train()
+    model.eval()
+    # model.train()
     criterion = nn.MSELoss()
     global glo_mx
     pre_mx = 0.8276
@@ -129,7 +148,8 @@ def eval(model, device, test_loader):
     with torch.no_grad():
         for images, labels in test_loader:
             images = images.to(device)
-            ## images = images + 0.005 * torch.randn(images.size()).to(device)
+            # images = images + 0.003 * torch.randn(images.size()).to(device)
+            ## images = images + 0.0make_unique05 * torch.randn(images.size()).to(device)
             # print(images.shape)
             # images = AE(images)
             # image, _ = test_loader.dataset[0]
@@ -218,8 +238,8 @@ start_time = time.time()
 # eval(CNNmodel, device, test_loader)
 def train_single():
     for epoch in range(num_epochs):
-        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler)
-        eval(CNNmodel, device, test_loader)
+        train(VGGmodel, device, train_loader, optimizer, epoch, scheduler)
+        eval(VGGmodel, device, test_loader)
         elapsed_time = time.time() - start_time
         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
         print(f"Max Accuracy on test set: {glo_mx:.2%}")

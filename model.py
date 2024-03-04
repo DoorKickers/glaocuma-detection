@@ -157,7 +157,41 @@ class ResNet50_max(nn.Module):
         x = F.log_softmax(x, dim = 1)
         return x
 
+class EdgeVGG19(nn.Module):
+    def __init__(self):
+        super(EdgeVGG19, self).__init__()
+        
+        # 加载预训练的VGG19模型
+        vgg19 = models.vgg19(pretrained=True)
+        
+        # 提取卷积层和全连接层
+        self.edge = vgg19.features[:9]
+        self.remain = vgg19.features[9:]
+        self.avgpool = vgg19.avgpool
+        self.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 1000),
+            nn.ReLU(inplace=True)
+        )
+        
+        # 添加自定义的加权层
+        self.custom_weighted_layer = nn.Linear(1000, 2)
+        
+    def forward(self, x):
+        edge = self.edge(x)
+        x = self.remain(edge)
+        x = x * 0.3 + edge * 0.7
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
 
+        # 将边缘细节特征与全连接层输出进行加权结合
+        x = self.custom_weighted_layer(x) * 0.3 + edge * 0.7
+        
+        return x
 # model = ResNet50_max()
 # print(model)
 
