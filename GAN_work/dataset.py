@@ -7,7 +7,6 @@ import torchvision.transforms as transforms
 import time
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from torch.utils.data import DataLoader
-from model import Autoencoder, DenoisingAutoencoder
 from torchvision.datasets import ImageFolder
 
 # Define the mean and standard deviation of the dataset
@@ -30,21 +29,29 @@ transform2 = transforms.Compose([
 train_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/training_set"
 # test_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/test_set"
 train_dataset = ImageFolder(root = train_dir, transform = transform)
+val_size = int(0.3 * len(train_dataset))
+train_size = len(train_dataset) - val_size
+train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size])
+torch.save(val_dataset, 'val_dataset.pth')
+torch.save(train_dataset, 'train_dataset.pth')
+
+sys.exit(0)
+
 # test_dataset = ImageFolder(root = test_dir, transform = transform)
 # torch.save(test_dataset, 'test_dataset_norm.pth')
 # sys.exit(0)
 extended_dataset = []
 
-for image, label in train_dataset:
-    image_flip = transforms.functional.vflip(image)
-    for angle in range(0, 360, 90) :
-        extended_dataset.append((transforms.functional.rotate(image, angle), label))
-        extended_dataset.append((transforms.functional.rotate(image_flip, angle), label))
+# for image, label in train_dataset:
+#     image_flip = transforms.functional.vflip(image)
+#     for angle in range(0, 360, 90) :
+#         extended_dataset.append((transforms.functional.rotate(image, angle), label))
+#         extended_dataset.append((transforms.functional.rotate(image_flip, angle), label))
 
-for i in range(6, 10):
-    pil_image = transforms.ToPILImage()(extended_dataset[i][0])
-    path = f"dataset_example/{i}.jpg"
-    pil_image.save(path)
+# for i in range(6, 10):
+#     pil_image = transforms.ToPILImage()(extended_dataset[i][0])
+#     path = f"dataset_example/{i}.jpg"
+#     pil_image.save(path)
     
 
 
