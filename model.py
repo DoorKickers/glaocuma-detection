@@ -245,7 +245,7 @@ class double_VGG19(nn.Module):
         self.vgg19_second = models.vgg19(pretrained=True)
         num_features = self.vgg19_second.classifier[6].in_features
         self.vgg19_second.classifier[6] = nn.Linear(num_features, num_classes)
-        self.vgg19_first.classifier[6] = nn.Linear(num_features, 3)
+        self.vgg19_first.classifier[6] = nn.Linear(num_features, 1)
         self.X = torch.arange(224.0, device='cuda').unsqueeze(1).expand(224, 224)
         self.Y = torch.arange(224.0, device='cuda').unsqueeze(0).expand(224, 224)
         torch.autograd.set_detect_anomaly(True)

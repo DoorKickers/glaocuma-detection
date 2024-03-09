@@ -29,18 +29,19 @@ torch.backends.cudnn.benchmark = False
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size = 32
 learning_rate = 1e-3
-num_epochs = 200
+num_epochs = 400
 log_interval = 1
 
 # train_dataset = torch.load('accredited_extended_dataset.pth')
+# train_dataset = torch.load('GAN_work/origin_train_dataset.pth')
 train_dataset = torch.load('origin_train_dataset.pth')
 test_dataset = torch.load('test_dataset.pth')
 # valid_dataset = torch.load('accredited_val_dataset.pth')
-valid_dataset = torch.load('ex_train_dataset.pth')
+# valid_dataset = torch.load('GAN_work/origin_valid_dataset.pth')
 
 train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, num_workers=4)
 test_loader = DataLoader(test_dataset, len(test_dataset), shuffle=False, num_workers=4)
-valid_loader = DataLoader(valid_dataset, len(valid_dataset), shuffle=False, num_workers=4)
+# valid_loader = DataLoader(valid_dataset, len(valid_dataset), shuffle=False, num_workers=4)
 
 # CNNmodel = ResNet50_normal(2)
 # fuck = models.resnet50(pretrained = True)
@@ -65,7 +66,7 @@ AE.load_state_dict(torch.load('s_autoencoder_0.0001.pth'))
 AE.eval()
 
 glo_mx = 0.0
-weight_decay = 1e-5
+weight_decay = 1e-4
 
 def train(model, device, train_loader, optimizer, epoch, scheduler, use_scheduler):
     model.train()
@@ -111,7 +112,7 @@ def train(model, device, train_loader, optimizer, epoch, scheduler, use_schedule
         for param in model.parameters():
             l2_reg += torch.norm(param)
 
-        use_l2_reg = False
+        use_l2_reg = True
         if use_l2_reg == True:
             loss += weight_decay * l2_reg
 
@@ -131,7 +132,7 @@ def train(model, device, train_loader, optimizer, epoch, scheduler, use_schedule
     print(f"Train Loss: {train_loss:.4f} - Train Accuracy: {train_accuracy:.4f}")
 
 def eval(model, device, test_loader, is_validation):
-    model.train()
+    model.eval()
     model.is_train = False
     # model.train()
     criterion = nn.MSELoss()
@@ -247,6 +248,7 @@ train_single()
 # fine_tuning_res(2, 10)
 
 # fine_tuning(50, 100)
-# torch.save(VGGmodel.state_dict(), 'double_VGG19_weight.pth')
+torch.save(VGGmodel.state_dict(), 'fix_0.5_double_VGG19_weight_400e.pth')
+# torch.save(VGGmodel.state_dict(), 'double_VGG19_weight_l2_400e.pth')
     # param.requires_grad = True
 # torch.save(model.state_dict(), 'autoencoder.pth')
