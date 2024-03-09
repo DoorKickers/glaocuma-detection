@@ -9,7 +9,7 @@ import sys
 import random
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from torch.utils.data import DataLoader
-from model import Autoencoder, DenoisingAutoencoder, ResNet50_normal, VGG19_with_STN, double_VGG19
+from model import Autoencoder, DenoisingAutoencoder, ResNet50_normal, VGG19_with_STN, double_VGG19, double_res50
 from torchvision.datasets import ImageFolder
 from PIL import Image
 from gradCAM import GradCAM
@@ -32,7 +32,7 @@ learning_rate = 1e-3
 num_epochs = 200
 log_interval = 1
 
-#train_dataset = torch.load('accredited_extended_dataset.pth')
+# train_dataset = torch.load('accredited_extended_dataset.pth')
 train_dataset = torch.load('origin_train_dataset.pth')
 test_dataset = torch.load('test_dataset.pth')
 # valid_dataset = torch.load('accredited_val_dataset.pth')
@@ -48,10 +48,12 @@ VGGmodel = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).to(device)
 
 num_features = VGGmodel.classifier[6].in_features
 VGGmodel.classifier[6] = nn.Linear(num_features, 2).to(device)
-CNNmodel = ResNet50_normal(2).to(device) # init.xavier_uniform_(VGGmodel.classifier[6].weight) # init.constant_(VGGmodel.classifier[6].bias, 0.0)
+# CNNmodel = ResNet50_normal(2).to(device) # init.xavier_uniform_(VGGmodel.classifier[6].weight) # init.constant_(VGGmodel.classifier[6].bias, 0.0)
 VGGmodel = double_VGG19(2).to(device) 
+# VGGmodel = double_res50(2).to(device)
+# VGGmodel = ResNet50_normal(2).to(device)
 
-print(CNNmodel)
+# print(CNNmodel)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.RMSprop(VGGmodel.parameters(), lr=2e-5)
 
@@ -67,6 +69,7 @@ weight_decay = 1e-5
 
 def train(model, device, train_loader, optimizer, epoch, scheduler, use_scheduler):
     model.train()
+    model.is_train = True
     total_images = 0
     if use_scheduler == True:
         scheduler.step()
@@ -128,7 +131,8 @@ def train(model, device, train_loader, optimizer, epoch, scheduler, use_schedule
     print(f"Train Loss: {train_loss:.4f} - Train Accuracy: {train_accuracy:.4f}")
 
 def eval(model, device, test_loader, is_validation):
-    model.eval()
+    model.train()
+    model.is_train = False
     # model.train()
     criterion = nn.MSELoss()
     global glo_mx
@@ -213,35 +217,36 @@ def fine_tuning(epochs_first, epochs_second):
         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
         print(f"Max Accuracy on test set: {glo_mx:.2%}") 
 
-def fine_tuning_res(epochs_first, epochs_second):
-    # Freeze the parameters in the feature extraction part
-    for param in CNNmodel.resnet50.parameters():
-        param.requires_grad = False
-    for param in CNNmodel.resnet50.fc.parameters():
-        param.requires_grad = True
-    for m in CNNmodel.modules():
-          if isinstance(m, nn.BatchNorm2d):
-              m.weight.requires_grad = True
-              m.bias.requires_grad = True
-    for epoch in range(epochs_first):
-        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler, False)
-        eval(CNNmodel, device, test_loader, False)
-        elapsed_time = time.time() - start_time
-        print(f"Elapsed Time: {elapsed_time:.2f} seconds")
-        print(f"Max Accuracy on test set: {glo_mx:.2%}")
-    for param in CNNmodel.resnet50.parameters():
-        param.requires_grad = True
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = 2e-5
-    for epoch in range(epochs_second):
-        train(CNNmodel, device, train_loader, optimizer, epoch, scheduler, False)
-        eval(CNNmodel, device, test_loader, False)
-        elapsed_time = time.time() - start_time
-        print(f"Elapsed Time: {elapsed_time:.2f} seconds")
-        print(f"Max Accuracy on test set: {glo_mx:.2%}") 
+# def fine_tuning_res(epochs_first, epochs_second):
+#     # Freeze the parameters in the feature extraction part
+#     for param in CNNmodel.resnet50.parameters():
+#         param.requires_grad = False
+#     for param in CNNmodel.resnet50.fc.parameters():
+#         param.requires_grad = True
+#     for m in CNNmodel.modules():
+#           if isinstance(m, nn.BatchNorm2d):
+#               m.weight.requires_grad = True
+#               m.bias.requires_grad = True
+#     for epoch in range(epochs_first):
+#         train(CNNmodel, device, train_loader, optimizer, epoch, scheduler, False)
+#         eval(CNNmodel, device, test_loader, False)
+#         elapsed_time = time.time() - start_time
+#         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
+#         print(f"Max Accuracy on test set: {glo_mx:.2%}")
+#     for param in CNNmodel.resnet50.parameters():
+#         param.requires_grad = True
+#     for param_group in optimizer.param_groups:
+#         param_group['lr'] = 2e-5
+#     for epoch in range(epochs_second):
+#         train(CNNmodel, device, train_loader, optimizer, epoch, scheduler, False)
+#         eval(CNNmodel, device, test_loader, False)
+#         elapsed_time = time.time() - start_time
+#         print(f"Elapsed Time: {elapsed_time:.2f} seconds")
+#         print(f"Max Accuracy on test set: {glo_mx:.2%}") 
 train_single()
 # fine_tuning_res(2, 10)
 
 # fine_tuning(50, 100)
+# torch.save(VGGmodel.state_dict(), 'double_VGG19_weight.pth')
     # param.requires_grad = True
 # torch.save(model.state_dict(), 'autoencoder.pth')

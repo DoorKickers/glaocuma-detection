@@ -4,6 +4,7 @@ import torch.nn.init as init
 import torchvision.models as models
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+import random
 
 class Autoencoder(nn.Module):
     def __init__(self):
@@ -248,13 +249,93 @@ class double_VGG19(nn.Module):
         self.X = torch.arange(224.0, device='cuda').unsqueeze(1).expand(224, 224)
         self.Y = torch.arange(224.0, device='cuda').unsqueeze(0).expand(224, 224)
         torch.autograd.set_detect_anomaly(True)
+        self.is_train = True
     def forward(self, x):
         y = self.vgg19_first(x)
         y = torch.sigmoid(y)
+        idx = random.randint(0, x.size()[0] - 1)
+        if self.is_train == True:
+            pil_image = transforms.ToPILImage()(x[idx])
+            path = f"circle/example1.jpg"
+            pil_image.save(path)
 
-        pil_image = transforms.ToPILImage()(x[0])
-        path = f"circle/example1.jpg"
-        pil_image.save(path)
+        if self.is_train == True:
+            for i in range(x.size()[0]):
+                y[i][0] = y[i][0] * 224
+                y[i][1] = y[i][1] * 224
+                t_X = self.X.clone()
+                t_Y = self.Y.clone()
+                t_XX = t_X - y[i][0]
+                t_YY = t_Y - y[i][1]
+                t_XXX = torch.mul(t_XX, t_XX.detach())
+                t_YYY = torch.mul(t_YY, t_YY.detach())
+                dis = torch.sqrt(torch.add(t_XXX, t_YYY))
+                dis = 224 - dis
+                dis = dis / 224
+                # dis = dis + y[i][2]
+                dis = dis + 1
+                dis = torch.log2(dis) 
+                mask = (dis >= y[i][2])
+                mx = torch.max(x[i])
+                dis.masked_fill_(mask, 1.0 / (mx + 0.01))
+                # dis = dis * 2.5
+                # print(dis / 224)
+                # dis = dis * 
+                # print(dis)
+                # dis_ = torch.min(dis, torch.tensor(1.0))
+                dis = dis.unsqueeze(0)
+                x[i] = torch.mul(x[i], dis.detach())
+                x[i] = torch.min(x[i], torch.tensor(1.0))
+        # c, h, w = x.size()[1:]
+        print(f"X : {y[0][0]}, Y : {y[0][1]}")
+        # j = torch.arange(h, dtype=torch.float32).unsqueeze(1).unsqueeze(2).unsqueeze(0)
+        # k = torch.arange(w, dtype=torch.float32).unsqueeze(0).unsqueeze(2).unsqueeze(0)
+        # diff_j = j - y[:, 0, 0, 0].unsqueeze(1).unsqueeze(1)
+        # diff_k = k - y[:, 1, 0, 0].unsqueeze(1).unsqueeze(1)
+        # squared_diff = diff_j * diff_j + diff_k * diff_k
+        # scaling_factor = torch.sqrt(squared_diff) * y[:, 2, 0, 0].unsqueeze(1).unsqueeze(1)
+        # x *= scaling_factor
+        if self.is_train == True:
+            pil_image = transforms.ToPILImage()(x[idx])
+            path = f"circle/example2.jpg"
+            pil_image.save(path)
+        x = self.vgg19_second(x)
+        return x
+
+
+class sphereAttention(nn.Module):
+    def __init__(self, input_size, input_channel):
+        super(sphereAttention, self).__init__()
+        self.localization = nn.Sequential(
+            nn.Conv2d(input_channel, 8, kernel_size=7),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            nn.Conv2d(8, 10, kernel_size=5),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True)
+        )
+
+class double_res50(nn.Module):
+    def __init__(self, num_classes):
+        super(double_res50, self).__init__()
+        self.res50_first = models.vgg19(pretrained=True)
+        self.res50_second = models.vgg19(pretrained=True)
+        self.res50_first.fc = nn.Linear(2048, 3)
+        self.res50_second.fc = nn.Linear(2048, num_classes)
+        self.X = torch.arange(224.0, device='cuda').unsqueeze(1).expand(224, 224)
+        self.Y = torch.arange(224.0, device='cuda').unsqueeze(0).expand(224, 224)
+        torch.autograd.set_detect_anomaly(True)
+        self.is_train = True
+        self.bn = nn.BatchNorm2d(64)
+    def forward(self, x):
+        y = self.res50_first(x)
+        # y = self.bn(y)
+        y = torch.sigmoid(y)
+        idx = random.randint(0, x.size()[0] - 1)
+        if self.is_train == False:
+            pil_image = transforms.ToPILImage()(x[idx])
+            path = f"circle_res/example1.jpg"
+            pil_image.save(path)
 
         for i in range(x.size()[0]):
             y[i][0] = y[i][0] * 224
@@ -268,12 +349,19 @@ class double_VGG19(nn.Module):
             dis = torch.sqrt(torch.add(t_XXX, t_YYY))
             dis = 224 - dis
             dis = dis / 224
+            dis = dis + 1
+            dis = torch.log2(dis)
+            mask = (dis >= y[i][2] * 1.45)
+            dis.masked_fill_(mask, 1)
+            # dis = dis * 2.5
             # print(dis / 224)
-            dis_ = dis * 1.3 * y[i][2]
+            # dis = dis * 
+            # print(dis)
+            dis_ = torch.min(dis, torch.tensor(1.0))
             dis_ = dis_.unsqueeze(0)
             x[i] = torch.mul(x[i], dis_.detach())
         # c, h, w = x.size()[1:]
-        print(f"X : {y[0][0]}, Y : {y[0][1]}, factor{y[0][2]}")
+        print(f"X : {y[0][0]}, Y : {y[0][1]}")
         # j = torch.arange(h, dtype=torch.float32).unsqueeze(1).unsqueeze(2).unsqueeze(0)
         # k = torch.arange(w, dtype=torch.float32).unsqueeze(0).unsqueeze(2).unsqueeze(0)
         # diff_j = j - y[:, 0, 0, 0].unsqueeze(1).unsqueeze(1)
@@ -281,8 +369,9 @@ class double_VGG19(nn.Module):
         # squared_diff = diff_j * diff_j + diff_k * diff_k
         # scaling_factor = torch.sqrt(squared_diff) * y[:, 2, 0, 0].unsqueeze(1).unsqueeze(1)
         # x *= scaling_factor
-        pil_image = transforms.ToPILImage()(x[0])
-        path = f"circle/example2.jpg"
-        pil_image.save(path)
-        x = self.vgg19_second(x)
+        if self.is_train == False:
+            pil_image = transforms.ToPILImage()(x[idx])
+            path = f"circle_res/example2.jpg"
+            pil_image.save(path)
+        x = self.res50_second(x)
         return x

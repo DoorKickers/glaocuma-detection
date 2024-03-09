@@ -29,11 +29,11 @@ transform2 = transforms.Compose([
 train_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/training_set"
 # test_dir = "/root/workspace_remote/data/RIM-ONE_DL_images/partitioned_by_hospital/test_set"
 train_dataset = ImageFolder(root = train_dir, transform = transform)
-val_size = int(0.3 * len(train_dataset))
+val_size = int(0.1 * len(train_dataset))
 train_size = len(train_dataset) - val_size
 train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size])
-torch.save(val_dataset, 'val_dataset.pth')
-torch.save(train_dataset, 'train_dataset.pth')
+torch.save(val_dataset, 'origin_val_dataset.pth')
+torch.save(train_dataset, 'origin_train_dataset.pth')
 
 sys.exit(0)
 

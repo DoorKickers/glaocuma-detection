@@ -4,6 +4,7 @@ import torchvision.models as models
 from torchvision import transforms
 from PIL import Image
 import numpy as np
+import torch.nn.functional as F
 import cv2
 
 # 定义Grad-CAM函数
@@ -79,3 +80,53 @@ class GradCAM:
         output_image = cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB)
 
         return output_image
+
+
+class GradCAM_VGG19:
+    def __init__(self, model):
+        self.model = model
+        self.feature_maps = None
+        self.gradient = None
+
+    def _hook_feature_maps(self, module, input, output):
+        self.feature_maps = output
+
+    def _hook_gradient(self, module, grad_input, grad_output):
+        self.gradient = grad_output[0]
+
+    def _get_gradients(self):
+        return self.gradient
+
+    def _get_feature_maps(self):
+        return self.feature_maps
+
+    def _register_hooks(self, target_layer):
+        target_layer.register_forward_hook(self._hook_feature_maps)
+        target_layer.register_backward_hook(self._hook_gradient)
+
+    def _calculate_grad_cam(self, target_class):
+        gradients = self._get_gradients()
+        feature_maps = self._get_feature_maps()
+
+        weights = F.adaptive_avg_pool2d(gradients, 1)
+        grad_cam = torch.mul(feature_maps, weights).sum(dim=1, keepdim=True)
+        grad_cam = F.relu(grad_cam)
+
+        return grad_cam
+
+    def generate_heatmap(self, input_image, target_class):
+        self.model.zero_grad()
+
+        self._register_hooks(self.model.features)
+
+        output = self.model(input_image)
+        output[:, target_class].backward(retain_graph=True)
+
+        grad_cam = self._calculate_grad_cam(target_class)
+
+        heatmap = F.interpolate(grad_cam, input_image.size()[2:], mode='bilinear', align_corners=False)
+        heatmap = heatmap.squeeze()
+        heatmap = heatmap.detach().cpu().numpy()
+        heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+
+        return heatmap
