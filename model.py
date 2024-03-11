@@ -236,22 +236,72 @@ class VGG19_with_STN(nn.Module):
         x = self.vgg19(x)
         return x
 
+class STN(nn.Module):
+    def __init__(self):
+        super(STN, self).__init__()
+
+        # Spatial transformer localization network
+        self.localization = nn.Sequential(
+            nn.Conv2d(3, 8, kernel_size=7),
+            # 224 224 -> 224 - 6 = 218
+            nn.MaxPool2d(2, stride=2),
+            # 109 109
+            nn.ReLU(True),
+            nn.Conv2d(8, 10, kernel_size=5),
+            # 105
+            nn.MaxPool2d(2, stride=2),
+            # 52
+            nn.ReLU(True),
+
+            nn.Conv2d(10, 12, kernel_size=3),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            # 25
+
+            nn.Conv2d(12, 14, kernel_size=5),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            # 10
+
+            nn.Conv2d(14, 16, kernel_size=7),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            # 2
+
+
+        )
+
+        # Regressor for the transformation parameters
+        self.fc_loc = nn.Sequential(
+            nn.Linear(16 * 2 * 2, 32),
+            nn.ReLU(True),
+            nn.Linear(32, 3)
+        )
+
+    def forward(self, x):
+        # Spatial transformer network forward function
+        x = self.localization(x)
+        x = x.view(-1, 16 * 2 * 2)
+        x = self.fc_loc(x)
+        return x
 
 
 class double_VGG19(nn.Module):
     def __init__(self, num_classes):
         super(double_VGG19, self).__init__()
         self.vgg19_first = models.vgg19(pretrained=True)
+        self.stn = STN()
         self.vgg19_second = models.vgg19(pretrained=True)
         num_features = self.vgg19_second.classifier[6].in_features
         self.vgg19_second.classifier[6] = nn.Linear(num_features, num_classes)
-        self.vgg19_first.classifier[6] = nn.Linear(num_features, 1)
+        self.vgg19_first.classifier[6] = nn.Linear(num_features, 3)
         self.X = torch.arange(224.0, device='cuda').unsqueeze(1).expand(224, 224)
         self.Y = torch.arange(224.0, device='cuda').unsqueeze(0).expand(224, 224)
         torch.autograd.set_detect_anomaly(True)
         self.is_train = True
     def forward(self, x):
         y = self.vgg19_first(x)
+        # y = self.stn(x)
         y = torch.sigmoid(y)
         idx = random.randint(0, x.size()[0] - 1)
         if self.is_train == True:
@@ -263,6 +313,8 @@ class double_VGG19(nn.Module):
             for i in range(x.size()[0]):
                 y[i][0] = y[i][0] * 224
                 y[i][1] = y[i][1] * 224
+                # x_factor = random.uniform(108, 116)
+                # y_factor = random.uniform(108, 116)
                 t_X = self.X.clone()
                 t_Y = self.Y.clone()
                 t_XX = t_X - y[i][0]
@@ -275,9 +327,19 @@ class double_VGG19(nn.Module):
                 # dis = dis + y[i][2]
                 dis = dis + 1
                 dis = torch.log2(dis) 
+                # range_factor = random.uniform(0.5, 0.6)
                 mask = (dis >= y[i][2])
                 mx = torch.max(x[i])
-                dis.masked_fill_(mask, 1.0 / (mx + 0.01))
+                # min_k_factor = torch.min(x[i])
+                min_k_factor = 1.0
+                max_k_factor = 1.0 / (mx + 0.01)
+                if min_k_factor > max_k_factor:
+                    t = min_k_factor
+                    min_k_factor = max_k_factor
+                    max_k_factor = t
+                k_factor = random.uniform(min_k_factor, max_k_factor)
+                # print(f"k_factor : {k_factor}")
+                dis.masked_fill_(mask, k_factor)
                 # dis = dis * 2.5
                 # print(dis / 224)
                 # dis = dis * 
@@ -287,7 +349,8 @@ class double_VGG19(nn.Module):
                 x[i] = torch.mul(x[i], dis.detach())
                 x[i] = torch.min(x[i], torch.tensor(1.0))
         # c, h, w = x.size()[1:]
-        print(f"X : {y[0][0]}, Y : {y[0][1]}")
+        # print(f"X : {y[0][0]}, Y : {y[0][1]}")
+        # print(f"factor : {y[0][0]}")
         # j = torch.arange(h, dtype=torch.float32).unsqueeze(1).unsqueeze(2).unsqueeze(0)
         # k = torch.arange(w, dtype=torch.float32).unsqueeze(0).unsqueeze(2).unsqueeze(0)
         # diff_j = j - y[:, 0, 0, 0].unsqueeze(1).unsqueeze(1)

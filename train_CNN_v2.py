@@ -29,7 +29,7 @@ torch.backends.cudnn.benchmark = False
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size = 32
 learning_rate = 1e-3
-num_epochs = 400
+num_epochs = 600
 log_interval = 1
 
 # train_dataset = torch.load('accredited_extended_dataset.pth')
@@ -112,7 +112,7 @@ def train(model, device, train_loader, optimizer, epoch, scheduler, use_schedule
         for param in model.parameters():
             l2_reg += torch.norm(param)
 
-        use_l2_reg = True
+        use_l2_reg = False
         if use_l2_reg == True:
             loss += weight_decay * l2_reg
 
@@ -248,7 +248,7 @@ train_single()
 # fine_tuning_res(2, 10)
 
 # fine_tuning(50, 100)
-torch.save(VGGmodel.state_dict(), 'fix_0.5_double_VGG19_weight_400e.pth')
+# torch.save(VGGmodel.state_dict(), 'range_kf_double_VGG19_weight_600e.pth')
 # torch.save(VGGmodel.state_dict(), 'double_VGG19_weight_l2_400e.pth')
     # param.requires_grad = True
 # torch.save(model.state_dict(), 'autoencoder.pth')
