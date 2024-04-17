@@ -290,6 +290,8 @@ class double_VGG19(nn.Module):
     def __init__(self, num_classes):
         super(double_VGG19, self).__init__()
         self.vgg19_first = models.vgg19(pretrained=True)
+        self.relu1 = nn.ReLU(True)
+        self.relu2 = nn.ReLU(True)
         self.stn = STN()
         self.vgg19_second = models.vgg19(pretrained=True)
         num_features = self.vgg19_second.classifier[6].in_features
@@ -299,18 +301,40 @@ class double_VGG19(nn.Module):
         self.Y = torch.arange(224.0, device='cuda').unsqueeze(0).expand(224, 224)
         torch.autograd.set_detect_anomaly(True)
         self.is_train = True
+    def freeze_first(self):
+        for param in self.vgg19_first.parameters():
+            param.requires_grad = False
+
     def forward(self, x):
         y = self.vgg19_first(x)
         # y = self.stn(x)
+        # y = self.relu1(y)
+        # y = -y + 1
+        # y = self.relu2(y)
         y = torch.sigmoid(y)
+        # print(y)
         idx = random.randint(0, x.size()[0] - 1)
         if self.is_train == True:
             pil_image = transforms.ToPILImage()(x[idx])
             path = f"circle/example1.jpg"
             pil_image.save(path)
 
+        # 1. norm test set to be maximum
+        # 2. freeze first vgg19 after some epoch
         if self.is_train == True:
+            # channel_mean = x.mean(dim=(1, 2))  # 计算每个通道的均值
+            # for c in range(x.size(0)):
+            #     x[c][x[c] < channel_mean[c]] = 0  # 将小于均值的元素赋值为0
+            #     # 计算每个位置的最大值
+            # # max_values, _ = torch.max(x, dim=0)
+            # # 使用广播将最大值复制到每个通道的相应位置
+            # # x = max_values.unsqueeze(0).expand_as(x)
+            # # return tensor
             for i in range(x.size()[0]):
+                # continue
+                # flag = random.randint(0, 1)
+                # if flag == 0:
+                    # continue
                 y[i][0] = y[i][0] * 224
                 y[i][1] = y[i][1] * 224
                 # x_factor = random.uniform(108, 116)
@@ -319,6 +343,8 @@ class double_VGG19(nn.Module):
                 t_Y = self.Y.clone()
                 t_XX = t_X - y[i][0]
                 t_YY = t_Y - y[i][1]
+                # t_XX = t_X - x_factor
+                # t_YY = t_Y - y_factor
                 t_XXX = torch.mul(t_XX, t_XX.detach())
                 t_YYY = torch.mul(t_YY, t_YY.detach())
                 dis = torch.sqrt(torch.add(t_XXX, t_YYY))
@@ -327,12 +353,14 @@ class double_VGG19(nn.Module):
                 # dis = dis + y[i][2]
                 dis = dis + 1
                 dis = torch.log2(dis) 
-                # range_factor = random.uniform(0.5, 0.6)
+
+                # range_factor = random.uniform(0.6, 0.7)
                 mask = (dis >= y[i][2])
                 mx = torch.max(x[i])
                 # min_k_factor = torch.min(x[i])
                 min_k_factor = 1.0
                 max_k_factor = 1.0 / (mx + 0.01)
+                # max_k_factor = 0.7
                 if min_k_factor > max_k_factor:
                     t = min_k_factor
                     min_k_factor = max_k_factor
@@ -348,6 +376,13 @@ class double_VGG19(nn.Module):
                 dis = dis.unsqueeze(0)
                 x[i] = torch.mul(x[i], dis.detach())
                 x[i] = torch.min(x[i], torch.tensor(1.0))
+        # else:
+            # for i in range(x.size()[0]):
+                # mx = torch.max(x[i])
+                # factor = 1.0 / (mx + 0.01)
+                # x[i] = x[i] * factor
+                # x[i] = torch.min(x[i], torch.tensor(1.0))
+
         # c, h, w = x.size()[1:]
         # print(f"X : {y[0][0]}, Y : {y[0][1]}")
         # print(f"factor : {y[0][0]}")
@@ -437,4 +472,76 @@ class double_res50(nn.Module):
             path = f"circle_res/example2.jpg"
             pil_image.save(path)
         x = self.res50_second(x)
+        return x
+
+
+
+class CBAM(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super(CBAM, self).__init__()
+        self.channels = channels
+        self.reduction = reduction
+
+        # Spatial attention layers
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(channels, 1, kernel_size=7, stride=1, padding=3),
+            nn.Sigmoid()
+        )
+
+        # Channel attention layers
+        self.channel_attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, channels // reduction, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // reduction, channels, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # Spatial attention
+        spatial_attention = self.spatial_attention(x)
+        x = x * spatial_attention
+
+        # Channel attention
+        channel_attention = self.channel_attention(x)
+        x = x * channel_attention
+
+        return x
+
+
+class CBVGG(nn.Module):
+    def __init__(self, num_classes):
+        super(CBVGG, self).__init__()
+        self.vgg19 = models.vgg19(pretrained = True)
+        # Modify the last fully connected layer for binary classification
+        num_features = self.vgg19.classifier[6].in_features
+        self.vgg19.classifier[6] = nn.Linear(num_features, num_classes)
+
+        # Add CBAM module after each convolutional layer
+        self.add_cbam(self.vgg19.features)
+
+    def add_cbam(self, module):
+        if isinstance(module, nn.Conv2d):
+            module.add_module('cbam', CBAM(module.out_channels))
+        elif isinstance(module, nn.Module):
+            for child in module.children():
+                self.add_cbam(child)
+
+
+
+    def forward(self, x):
+        x = self.vgg19(x)
+        return x
+
+
+class ViT(nn.Module):
+    def __init__(self, num_classes):
+        super(ViT, self).__init__()
+        self.transformer = nn.Transformer(d_model=768, nhead=12, num_encoder_layers=12)
+        self.fc = nn.Linear(768, num_classes)
+
+    def forward(self, x):
+        x = self.transformer(x, x)
+        x = x.mean(dim=1)  # 对图像的每个patch取平均
+        x = self.fc(x)
         return x
